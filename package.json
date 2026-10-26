@@ -1,0 +1,23 @@
+{
+  "name": "discord-game-bot",
+  "version": "1.0.0",
+  "description": "Discord Game & Economy Bot converted to Node.js",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "economy",
+    "games"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7"
+  }
+}
