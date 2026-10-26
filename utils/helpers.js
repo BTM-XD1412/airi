@@ -2,6 +2,8 @@ const { PermissionsBitField } = require('discord.js');
 const config = require('./json/config.json');
 const dbModule = require('./database');
 
+const MAX_BET = 10_000_000_000; // Giới hạn cược tối đa: 10 tỷ Gold
+
 /**
  * Kiểm tra người dùng có quyền Administrator không (sử dụng PermissionsBitField, không kiểm tra ID)
  * @param {import('discord.js').Message|import('discord.js').ChatInputCommandInteraction} context 
@@ -22,11 +24,35 @@ function formatGold(amount) {
 }
 
 /**
- * Lấy chuỗi ngày hiện tại theo chuẩn YYYY-MM-DD
+ * Lấy chuỗi ngày hiện tại theo chuẩn YYYY-MM-DD theo múi giờ Việt Nam (Asia/Ho_Chi_Minh)
  * @returns {string}
  */
 function getTodayString() {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+}
+
+/**
+ * Xác thực số tiền cược hợp lệ và đủ số dư
+ * @param {any} rawAmount 
+ * @param {number} userGold 
+ * @returns {{ valid: boolean, amount?: number, error?: string }}
+ */
+function validateBet(rawAmount, userGold) {
+  const amount = parseInt(rawAmount, 10);
+
+  if (isNaN(amount) || amount <= 0 || !Number.isSafeInteger(amount)) {
+    return { valid: false, error: '❌ Số tiền cược phải là số nguyên lớn hơn 0!' };
+  }
+
+  if (amount > MAX_BET) {
+    return { valid: false, error: `❌ Số tiền cược tối đa cho phép là **${formatGold(MAX_BET)} Gold**!` };
+  }
+
+  if (userGold < amount) {
+    return { valid: false, error: '❌ Bạn không đủ Gold để cược số tiền này!' };
+  }
+
+  return { valid: true, amount };
 }
 
 /**
@@ -61,12 +87,11 @@ async function resolveMember(message, args = []) {
 }
 
 module.exports = {
-  // Re-export toàn bộ database methods (SQLite)
   ...dbModule,
-  
-  // Helpers tiện ích
+  MAX_BET,
   isAdmin,
   formatGold,
   getTodayString,
+  validateBet,
   resolveMember
 };

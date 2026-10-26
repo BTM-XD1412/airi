@@ -4,6 +4,7 @@ const fs = require('fs');
 
 const DB_PATH = path.join(__dirname, '..', 'data.sqlite');
 const DATA_JSON_PATH = path.join(__dirname, '..', 'data.json');
+const MAX_SAFE_GOLD = Number.MAX_SAFE_INTEGER;
 
 // Khởi tạo kết nối SQLite
 const db = new Database(DB_PATH);
@@ -29,19 +30,18 @@ db.exec(`
       const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
 
       if (userCount === 0 && Object.keys(jsonData).length > 0) {
-        console.log('[ SQLite ] Đang di chuyển dữ liệu từ data.json sang data.sqlite...');
         const insert = db.prepare('INSERT OR IGNORE INTO users (user_id, gold, last_daily) VALUES (?, ?, ?)');
         const insertMany = db.transaction((users) => {
           for (const [uid, info] of Object.entries(users)) {
-            insert.run(String(uid), info.gold || 100, info.last_daily || '');
+            const safeGold = typeof info.gold === 'number' ? info.gold : 100;
+            insert.run(String(uid), safeGold, info.last_daily || '');
           }
         });
         insertMany(jsonData);
-        console.log('[ SQLite ] Đã hoàn tất di chuyển dữ liệu thành công!');
       }
     }
   } catch (err) {
-    console.error('[ SQLite ] Lỗi di chuyển dữ liệu từ data.json:', err.message);
+    console.error('[database] Lỗi di chuyển dữ liệu từ data.json: ' + err.message);
   }
 })();
 
@@ -49,7 +49,7 @@ db.exec(`
 const stmts = {
   getUser: db.prepare('SELECT user_id, gold, last_daily FROM users WHERE user_id = ?'),
   insertUser: db.prepare("INSERT OR IGNORE INTO users (user_id, gold, last_daily) VALUES (?, 100, '')"),
-  addGold: db.prepare('UPDATE users SET gold = gold + ? WHERE user_id = ?'),
+  addGold: db.prepare('UPDATE users SET gold = MIN(gold + ?, ?) WHERE user_id = ?'),
   removeGold: db.prepare('UPDATE users SET gold = MAX(0, gold - ?) WHERE user_id = ?'),
   setGold: db.prepare('UPDATE users SET gold = ? WHERE user_id = ?'),
   setDaily: db.prepare('UPDATE users SET last_daily = ? WHERE user_id = ?'),
@@ -89,8 +89,9 @@ function getGold(userId) {
  */
 function addGold(userId, amount) {
   const uid = String(userId);
-  getUser(uid); // Đảm bảo đã có bản ghi
-  stmts.addGold.run(amount, uid);
+  getUser(uid);
+  const safeAmount = Math.max(0, Math.floor(amount));
+  stmts.addGold.run(safeAmount, MAX_SAFE_GOLD, uid);
   return getGold(uid);
 }
 
@@ -103,7 +104,8 @@ function addGold(userId, amount) {
 function removeGold(userId, amount) {
   const uid = String(userId);
   getUser(uid);
-  stmts.removeGold.run(amount, uid);
+  const safeAmount = Math.max(0, Math.floor(amount));
+  stmts.removeGold.run(safeAmount, uid);
   return getGold(uid);
 }
 
@@ -117,6 +119,40 @@ function setDaily(userId, dateStr) {
   getUser(uid);
   stmts.setDaily.run(dateStr, uid);
 }
+
+/**
+ * Trừ tiền cược ngay lập tức bằng SQLite transaction để tránh race condition / spam cược
+ * @param {string|number} userId 
+ * @param {number} amount 
+ * @returns {boolean} True nếu trừ thành công, false nếu số dư không đủ
+ */
+const tryDeductBet = db.transaction((userId, amount) => {
+  const uid = String(userId);
+  const user = getUser(uid);
+  if (user.gold < amount) {
+    return false;
+  }
+  stmts.removeGold.run(amount, uid);
+  return true;
+});
+
+/**
+ * Điểm danh hàng ngày nguyên tử (Atomic Transaction)
+ * @param {string|number} userId 
+ * @param {string} dateStr 
+ * @param {number} reward 
+ * @returns {{ success: boolean, alreadyClaimed?: boolean, newBalance?: number }}
+ */
+const claimDaily = db.transaction((userId, dateStr, reward) => {
+  const uid = String(userId);
+  const user = getUser(uid);
+  if (user.last_daily === dateStr) {
+    return { success: false, alreadyClaimed: true };
+  }
+  stmts.addGold.run(reward, MAX_SAFE_GOLD, uid);
+  stmts.setDaily.run(dateStr, uid);
+  return { success: true, newBalance: user.gold + reward };
+});
 
 /**
  * Chuyển tiền an toàn giữa 2 người dùng bằng SQLite Transaction
@@ -136,7 +172,7 @@ const transferGold = db.transaction((fromUserId, toUserId, amount) => {
   }
 
   stmts.removeGold.run(amount, fromUid);
-  stmts.addGold.run(amount, toUid);
+  stmts.addGold.run(amount, MAX_SAFE_GOLD, toUid);
   return true;
 });
 
@@ -173,7 +209,8 @@ const saveData = db.transaction((data) => {
       last_daily = excluded.last_daily
   `);
   for (const [uid, info] of Object.entries(data)) {
-    upsert.run(String(uid), info.gold || 100, info.last_daily || '');
+    const safeGold = typeof info.gold === 'number' ? info.gold : 100;
+    upsert.run(String(uid), safeGold, info.last_daily || '');
   }
 });
 
@@ -192,11 +229,14 @@ function getUserData(userId) {
 
 module.exports = {
   db,
+  MAX_SAFE_GOLD,
   getUser,
   getGold,
   addGold,
   removeGold,
   setDaily,
+  tryDeductBet,
+  claimDaily,
   transferGold,
   getLeaderboard,
   loadData,
