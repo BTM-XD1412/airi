@@ -1,6 +1,6 @@
 # 🤖 Discord Game & Tiền Tệ Bot (Node.js - SQLite Database)
 
-Dự án Bot Discord về Mini-games và Hệ thống Kinh tế (Gold) được chuyển thể sang Node.js (`discord.js v14`), module hóa theo cấu trúc chuẩn dự án mẫu `A90`, và lưu trữ dữ liệu an toàn trên **SQLite** (`better-sqlite3`).
+Dự án Bot Discord về Mini-games và Hệ thống Kinh tế (Gold) được chuyển thể sang Node.js (`discord.js v14`), và lưu trữ dữ liệu an toàn trên **SQLite** (`better-sqlite3`).
 
 ---
 
@@ -91,5 +91,5 @@ airi/
    ```
 2. Khởi chạy bot:
    ```bash
-   npm start
+   node .
    ```
