@@ -1,5 +1,5 @@
-const { ApplicationCommandOptionType, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { addGold, formatGold, isAdmin } = require('../utils/helpers');
+const { ApplicationCommandOptionType, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
+const { addGold, formatGold, isAdmin, MAX_BET } = require('../utils/helpers');
 
 module.exports = {
   name: 'addgold',
@@ -26,18 +26,22 @@ module.exports = {
       const errorEmbed = new EmbedBuilder()
         .setDescription('❌ Bạn không có quyền sử dụng lệnh này! (Chỉ Admin mới có thể dùng)')
         .setColor(0xE74C3C);
-      return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
 
     const targetUser = interaction.options.getUser('user');
     const amount = interaction.options.getInteger('amount');
 
     if (!targetUser) {
-      return interaction.reply({ content: '❌ Không tìm thấy người chơi hợp lệ!', ephemeral: true });
+      return interaction.reply({ content: '❌ Không tìm thấy người chơi hợp lệ!', flags: MessageFlags.Ephemeral });
     }
 
-    if (amount <= 0) {
-      return interaction.reply({ content: '❌ Số tiền cộng phải lớn hơn 0!', ephemeral: true });
+    if (amount <= 0 || !Number.isSafeInteger(amount)) {
+      return interaction.reply({ content: '❌ Số tiền cộng phải là số nguyên lớn hơn 0!', flags: MessageFlags.Ephemeral });
+    }
+
+    if (amount > MAX_BET) {
+      return interaction.reply({ content: `❌ Số tiền cộng tối đa là **${formatGold(MAX_BET)} Gold**!`, flags: MessageFlags.Ephemeral });
     }
 
     const newBalance = addGold(targetUser.id, amount);
