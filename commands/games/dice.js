@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getGold, addGold, removeGold, formatGold } = require('../../utils/helpers');
+const { getGold, addGold, tryDeductBet, formatGold, validateBet } = require('../../utils/helpers');
 
 const DICE_EMOJIS = {
   1: '⚀',
@@ -17,10 +17,10 @@ module.exports = {
   run: async (client, message, args) => {
     // Hỗ trợ cả 2 dạng: A!dice <mat 1-6> <so_tien> hoặc A!dice <so_tien> <mat 1-6>
     let rawFace = parseInt(args[0], 10);
-    let amount = parseInt(args[1], 10);
+    let rawAmount = args[1];
 
     if (rawFace > 6 && !isNaN(parseInt(args[1], 10)) && parseInt(args[1], 10) >= 1 && parseInt(args[1], 10) <= 6) {
-      amount = parseInt(args[0], 10);
+      rawAmount = args[0];
       rawFace = parseInt(args[1], 10);
     }
 
@@ -37,15 +37,20 @@ module.exports = {
       return message.channel.send({ embeds: [embed] });
     }
 
-    if (isNaN(amount) || amount <= 0) {
+    const uid = String(message.author.id);
+    const userGold = getGold(uid);
+    const validation = validateBet(rawAmount, userGold);
+
+    if (!validation.valid) {
       const embed = new EmbedBuilder()
-        .setDescription('❌ Số tiền cược phải lớn hơn 0!')
+        .setDescription(validation.error)
         .setColor(0xE74C3C);
       return message.channel.send({ embeds: [embed] });
     }
 
-    const uid = String(message.author.id);
-    if (getGold(uid) < amount) {
+    const amount = validation.amount;
+
+    if (!tryDeductBet(uid, amount)) {
       const embed = new EmbedBuilder()
         .setDescription('❌ Bạn không đủ Gold để cược số tiền này!')
         .setColor(0xE74C3C);
@@ -62,13 +67,11 @@ module.exports = {
       );
 
     if (rawFace === rolledFace) {
-      const won = amount * 5;
-      addGold(uid, won);
+      addGold(uid, amount * 5);
       embed
         .setColor(0x2ECC71)
-        .setDescription(`🎉 **XUẤT SẮC!** Xúc xắc ra đúng mặt **${rolledFace}**!\nBạn nhận được **+${formatGold(won)} Gold** (Tỷ lệ 1 ăn 5).`);
+        .setDescription(`🎉 **XUẤT SẮC!** Xúc xắc ra đúng mặt **${rolledFace}**!\nBạn nhận được **+${formatGold(amount * 5)} Gold** (Tỷ lệ 1 ăn 5).`);
     } else {
-      removeGold(uid, amount);
       embed
         .setColor(0xE74C3C)
         .setDescription(`😢 **THUA RỒI!** Xúc xắc ra mặt **${rolledFace}**, không phải mặt **${rawFace}**.\nBạn mất **-${formatGold(amount)} Gold**.`);

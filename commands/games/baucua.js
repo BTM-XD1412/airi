@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getGold, addGold, removeGold, formatGold } = require('../../utils/helpers');
+const { getGold, addGold, tryDeductBet, formatGold, validateBet } = require('../../utils/helpers');
 
 const ITEMS = {
   nai: { name: 'Nai', emoji: '🦌' },
@@ -26,10 +26,10 @@ module.exports = {
   run: async (client, message, args) => {
     // Hỗ trợ cả 2 thứ tự: A!baucua <con_vat> <so_tien> hoặc A!baucua <so_tien> <con_vat>
     let rawChoice = args[0]?.toLowerCase();
-    let amount = parseInt(args[1], 10);
+    let rawAmount = args[1];
 
     if (!isNaN(parseInt(args[0], 10)) && args[1]) {
-      amount = parseInt(args[0], 10);
+      rawAmount = args[0];
       rawChoice = args[1]?.toLowerCase();
     }
 
@@ -47,15 +47,20 @@ module.exports = {
       return message.channel.send({ embeds: [embed] });
     }
 
-    if (isNaN(amount) || amount <= 0) {
+    const uid = String(message.author.id);
+    const userGold = getGold(uid);
+    const validation = validateBet(rawAmount, userGold);
+
+    if (!validation.valid) {
       const embed = new EmbedBuilder()
-        .setDescription('❌ Số tiền cược phải lớn hơn 0!')
+        .setDescription(validation.error)
         .setColor(0xE74C3C);
       return message.channel.send({ embeds: [embed] });
     }
 
-    const uid = String(message.author.id);
-    if (getGold(uid) < amount) {
+    const amount = validation.amount;
+
+    if (!tryDeductBet(uid, amount)) {
       const embed = new EmbedBuilder()
         .setDescription('❌ Bạn không đủ Gold để cược số tiền này!')
         .setColor(0xE74C3C);
@@ -68,7 +73,6 @@ module.exports = {
     const r3 = keys[Math.floor(Math.random() * keys.length)];
     const rolled = [r1, r2, r3];
 
-    // Đếm số lần biểu tượng người chơi chọn xuất hiện
     const matchCount = rolled.filter(k => k === choiceKey).length;
     const playerItem = ITEMS[choiceKey];
 
@@ -88,12 +92,11 @@ module.exports = {
       );
 
     if (matchCount > 0) {
-      const wonAmount = amount * matchCount;
-      addGold(uid, wonAmount);
+      const profit = amount * matchCount;
+      addGold(uid, amount + profit); // Hoàn cược + tiền thắng
       embed.setColor(0x2ECC71);
-      embed.setDescription(`🎉 **THẮNG LỚN!** Trúng **${matchCount}** mặt ${playerItem.emoji}! Bạn nhận được **+${formatGold(wonAmount)} Gold**.`);
+      embed.setDescription(`🎉 **THẮNG LỚN!** Trúng **${matchCount}** mặt ${playerItem.emoji}! Bạn nhận được **+${formatGold(profit)} Gold**.`);
     } else {
-      removeGold(uid, amount);
       embed.setColor(0xE74C3C);
       embed.setDescription(`😢 **THUA RỒI!** Không có mặt ${playerItem.emoji} nào. Bạn bị trừ **-${formatGold(amount)} Gold**.`);
     }

@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getGold, addGold, removeGold, formatGold } = require('../../utils/helpers');
+const { getGold, addGold, tryDeductBet, formatGold, validateBet } = require('../../utils/helpers');
 
 module.exports = {
   name: 'taixiu',
@@ -8,10 +8,10 @@ module.exports = {
   run: async (client, message, args) => {
     // Hỗ trợ cả 2 thứ tự: A!taixiu <tai/xiu> <tien> hoặc A!taixiu <tien> <tai/xiu>
     let choice = args[0]?.toLowerCase();
-    let amount = parseInt(args[1], 10);
+    let rawAmount = args[1];
 
     if (!isNaN(parseInt(args[0], 10)) && args[1]) {
-      amount = parseInt(args[0], 10);
+      rawAmount = args[0];
       choice = args[1]?.toLowerCase();
     }
 
@@ -22,15 +22,20 @@ module.exports = {
       return message.channel.send({ embeds: [embed] });
     }
 
-    if (isNaN(amount) || amount <= 0) {
+    const uid = String(message.author.id);
+    const userGold = getGold(uid);
+    const validation = validateBet(rawAmount, userGold);
+
+    if (!validation.valid) {
       const embed = new EmbedBuilder()
-        .setDescription('❌ Số tiền cược phải lớn hơn 0!')
+        .setDescription(validation.error)
         .setColor(0xE74C3C);
       return message.channel.send({ embeds: [embed] });
     }
 
-    const uid = String(message.author.id);
-    if (getGold(uid) < amount) {
+    const amount = validation.amount;
+
+    if (!tryDeductBet(uid, amount)) {
       const embed = new EmbedBuilder()
         .setDescription('❌ Bạn không đủ Gold để cược số tiền này!')
         .setColor(0xE74C3C);
@@ -53,11 +58,10 @@ module.exports = {
       });
 
     if (userChoice === outcome) {
-      addGold(uid, amount);
+      addGold(uid, amount * 2); // Hoàn cược + lãi
       embed.setColor(0x2ECC71);
       embed.setDescription(`🎉 **THẮNG!** Bạn đoán đúng và nhận được **+${formatGold(amount)} Gold**.`);
     } else {
-      removeGold(uid, amount);
       embed.setColor(0xE74C3C);
       embed.setDescription(`😢 **THUA!** Bạn đã mất **-${formatGold(amount)} Gold**.`);
     }

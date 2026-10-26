@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getGold, addGold, removeGold, formatGold } = require('../../utils/helpers');
+const { getGold, addGold, tryDeductBet, formatGold, validateBet } = require('../../utils/helpers');
 
 module.exports = {
   name: 'xoso',
@@ -8,11 +8,11 @@ module.exports = {
   run: async (client, message, args) => {
     // Hỗ trợ cả 2 thứ tự: A!xoso <con_so> <so_tien> hoặc A!xoso <so_tien> <con_so>
     let rawNumber = args[0];
-    let amount = parseInt(args[1], 10);
+    let rawAmount = args[1];
 
     if (!isNaN(parseInt(args[0], 10)) && args[1] && args[1].length <= 2) {
       if (parseInt(args[0], 10) > 99) {
-        amount = parseInt(args[0], 10);
+        rawAmount = args[0];
         rawNumber = args[1];
       }
     }
@@ -31,15 +31,20 @@ module.exports = {
       return message.channel.send({ embeds: [embed] });
     }
 
-    if (isNaN(amount) || amount <= 0) {
+    const uid = String(message.author.id);
+    const userGold = getGold(uid);
+    const validation = validateBet(rawAmount, userGold);
+
+    if (!validation.valid) {
       const embed = new EmbedBuilder()
-        .setDescription('❌ Số tiền cược mua vé số phải lớn hơn 0!')
+        .setDescription(validation.error)
         .setColor(0xE74C3C);
       return message.channel.send({ embeds: [embed] });
     }
 
-    const uid = String(message.author.id);
-    if (getGold(uid) < amount) {
+    const amount = validation.amount;
+
+    if (!tryDeductBet(uid, amount)) {
       const embed = new EmbedBuilder()
         .setDescription('❌ Bạn không đủ Gold để mua vé số này!')
         .setColor(0xE74C3C);
@@ -64,7 +69,6 @@ module.exports = {
         .setColor(0x2ECC71)
         .setDescription(`🎊 **ĐỘC ĐẮC RỒI!** Chúc mừng bạn đã đoán chính xác số **${winningStr}**!\nBạn ẵm trọn giải thưởng gấp 70 lần: **+${formatGold(jackpot)} Gold**.`);
     } else {
-      removeGold(uid, amount);
       embed
         .setColor(0xE74C3C)
         .setDescription(`😢 **CHÚC BẠN MAY MẮN LẦN SAU!** Số mở thưởng là **${winningStr}**, không trùng với số **${chosenStr}** của bạn.\nBạn mất **-${formatGold(amount)} Gold**.`);

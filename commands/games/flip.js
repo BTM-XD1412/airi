@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getGold, addGold, removeGold, formatGold } = require('../../utils/helpers');
+const { getGold, addGold, tryDeductBet, formatGold, validateBet } = require('../../utils/helpers');
 
 module.exports = {
   name: 'flip',
@@ -7,15 +7,14 @@ module.exports = {
   aliases: ['coinflip', 'sfac', 'cf'],
   run: async (client, message, args) => {
     // Hỗ trợ cả 2 dạng: A!flip <so_tien> <sap/ngua> hoặc A!flip <sap/ngua> <so_tien>
-    let amount = parseInt(args[0], 10);
+    let rawAmount = args[0];
     let choice = args[1]?.toLowerCase();
 
-    if (isNaN(amount) && !isNaN(parseInt(args[1], 10))) {
-      amount = parseInt(args[1], 10);
+    if (isNaN(parseInt(args[0], 10)) && !isNaN(parseInt(args[1], 10))) {
+      rawAmount = args[1];
       choice = args[0]?.toLowerCase();
     }
 
-    // Chuẩn hóa lựa chọn s/sap/h (heads) và n/ngua/t (tails)
     const choiceMap = {
       'sap': 'sap', 'sấp': 'sap', 's': 'sap', 'h': 'sap', 'head': 'sap', 'heads': 'sap',
       'ngua': 'ngua', 'ngửa': 'ngua', 'n': 'ngua', 't': 'ngua', 'tail': 'ngua', 'tails': 'ngua'
@@ -29,15 +28,20 @@ module.exports = {
       return message.channel.send({ embeds: [embed] });
     }
 
-    if (isNaN(amount) || amount <= 0) {
+    const uid = String(message.author.id);
+    const userGold = getGold(uid);
+    const validation = validateBet(rawAmount, userGold);
+
+    if (!validation.valid) {
       const embed = new EmbedBuilder()
-        .setDescription('❌ Số tiền cược phải lớn hơn 0!')
+        .setDescription(validation.error)
         .setColor(0xE74C3C);
       return message.channel.send({ embeds: [embed] });
     }
 
-    const uid = String(message.author.id);
-    if (getGold(uid) < amount) {
+    const amount = validation.amount;
+
+    if (!tryDeductBet(uid, amount)) {
       const embed = new EmbedBuilder()
         .setDescription('❌ Bạn không đủ Gold để cược số tiền này!')
         .setColor(0xE74C3C);
@@ -52,11 +56,10 @@ module.exports = {
       .setColor(0xF1C40F);
 
     if (finalChoice === result) {
-      addGold(uid, amount);
+      addGold(uid, amount * 2);
       embed.setDescription(`🎯 Đồng xu ra mặt **${resultText}**! Bạn thắng **+${formatGold(amount)} Gold**.`);
       embed.setColor(0x2ECC71);
     } else {
-      removeGold(uid, amount);
       embed.setDescription(`😢 Đồng xu ra mặt **${resultText}**! Bạn thua và mất **-${formatGold(amount)} Gold**.`);
       embed.setColor(0xE74C3C);
     }

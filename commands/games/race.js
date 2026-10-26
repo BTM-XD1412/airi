@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getGold, addGold, removeGold, formatGold } = require('../../utils/helpers');
+const { getGold, addGold, tryDeductBet, formatGold, validateBet } = require('../../utils/helpers');
 
 const RACERS = [
   { id: '1', key: 'cho', name: 'Chó Vàng', emoji: '🐕' },
@@ -15,11 +15,11 @@ module.exports = {
   aliases: ['srace', 'duathu'],
   run: async (client, message, args) => {
     // Cú pháp: A!race <so_tien> <con_vat> hoặc A!race <con_vat> <so_tien>
-    let amount = parseInt(args[0], 10);
+    let rawAmount = args[0];
     let choice = args[1]?.toLowerCase();
 
-    if (isNaN(amount) && !isNaN(parseInt(args[1], 10))) {
-      amount = parseInt(args[1], 10);
+    if (isNaN(parseInt(args[0], 10)) && !isNaN(parseInt(args[1], 10))) {
+      rawAmount = args[1];
       choice = args[0]?.toLowerCase();
     }
 
@@ -42,15 +42,21 @@ module.exports = {
       return message.channel.send({ embeds: [embed] });
     }
 
-    if (isNaN(amount) || amount <= 0) {
+    const uid = String(message.author.id);
+    const userGold = getGold(uid);
+    const validation = validateBet(rawAmount, userGold);
+
+    if (!validation.valid) {
       const embed = new EmbedBuilder()
-        .setDescription('❌ Số tiền cược phải lớn hơn 0!')
+        .setDescription(validation.error)
         .setColor(0xE74C3C);
       return message.channel.send({ embeds: [embed] });
     }
 
-    const uid = String(message.author.id);
-    if (getGold(uid) < amount) {
+    const amount = validation.amount;
+
+    // Trừ tiền cược trước khi gửi message để tránh spam lệnh exploit
+    if (!tryDeductBet(uid, amount)) {
       const embed = new EmbedBuilder()
         .setDescription('❌ Bạn không đủ Gold để cược số tiền này!')
         .setColor(0xE74C3C);
@@ -62,8 +68,8 @@ module.exports = {
 
     const renderTrack = () => {
       return positions.map(r => {
-        const left = '- '.repeat(TRACK_LENGTH - r.pos);
-        const right = '- '.repeat(r.pos);
+        const left = '- '.repeat(Math.max(0, TRACK_LENGTH - r.pos));
+        const right = '- '.repeat(Math.min(TRACK_LENGTH, r.pos));
         return `🏁 ${left}${r.emoji} ${right}**${r.name}**`;
       }).join('\n');
     };
@@ -76,20 +82,30 @@ module.exports = {
       )
       .setColor(0xF1C40F);
 
-    const raceMsg = await message.channel.send({ embeds: [initialEmbed] });
+    let raceMsg;
+    try {
+      raceMsg = await message.channel.send({ embeds: [initialEmbed] });
+    } catch (err) {
+      // Hoàn lại tiền nếu gửi tin nhắn thất bại
+      addGold(uid, amount);
+      return;
+    }
 
+    // Mô phỏng từng vòng đua công bằng (đồng thời)
     let winner = null;
     while (!winner) {
       for (const r of positions) {
         r.pos += Math.floor(Math.random() * 3) + 1;
-        if (r.pos >= TRACK_LENGTH) {
-          r.pos = TRACK_LENGTH;
-          winner = r;
-          break;
-        }
+      }
+      const finished = positions.filter(r => r.pos >= TRACK_LENGTH);
+      if (finished.length > 0) {
+        const maxPos = Math.max(...finished.map(f => f.pos));
+        const topContenders = finished.filter(f => f.pos === maxPos);
+        winner = topContenders[Math.floor(Math.random() * topContenders.length)];
       }
     }
 
+    // Đợi 1.5s tạo hiệu ứng hồi hộp
     await new Promise(res => setTimeout(res, 1500));
 
     const finalEmbed = new EmbedBuilder()
@@ -106,7 +122,6 @@ module.exports = {
       finalEmbed.setColor(0x2ECC71);
       finalEmbed.setDescription(`🎉 **CHIẾN THẮNG RỰC RỠ!** ${selectedRacer.emoji} **${selectedRacer.name}** đã cán đích đầu tiên! Bạn nhận được **+${formatGold(reward)} Gold** (Tỷ lệ 1 ăn 4).`);
     } else {
-      removeGold(uid, amount);
       finalEmbed.setColor(0xE74C3C);
       finalEmbed.setDescription(`😢 **THUA CUỘC!** ${winner.emoji} **${winner.name}** đã về đích trước. Bạn mất **-${formatGold(amount)} Gold**.`);
     }

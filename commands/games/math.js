@@ -2,6 +2,8 @@ const { EmbedBuilder } = require('discord.js');
 const { addGold, formatGold } = require('../../utils/helpers');
 
 const activeMathQuizzes = new Set();
+const mathCooldowns = new Map();
+const COOLDOWN_SECONDS = 20;
 
 module.exports = {
   name: 'math',
@@ -9,12 +11,24 @@ module.exports = {
   aliases: ['smath', 'toanhoc', 'sdt'],
   run: async (client, message, args) => {
     const uid = String(message.author.id);
+    const now = Date.now();
+    const lastPlayed = mathCooldowns.get(uid);
+
+    if (lastPlayed && now - lastPlayed < COOLDOWN_SECONDS * 1000) {
+      const remaining = Math.ceil((lastPlayed + COOLDOWN_SECONDS * 1000 - now) / 1000);
+      const embed = new EmbedBuilder()
+        .setTitle('⏳ Hãy Nghỉ Ngơi')
+        .setDescription(`Não bộ cần hồi sức! Hãy quay lại sau **${remaining} giây**.`)
+        .setColor(0xE67E22);
+      return message.channel.send({ embeds: [embed] });
+    }
 
     if (activeMathQuizzes.has(uid)) {
       return message.reply('⚠️ Bạn đang có một câu đố toán học chưa hoàn thành, hãy trả lời câu đó trước!');
     }
 
     activeMathQuizzes.add(uid);
+    mathCooldowns.set(uid, now);
 
     const operations = ['+', '-', '*'];
     const op = operations[Math.floor(Math.random() * operations.length)];
@@ -44,11 +58,12 @@ module.exports = {
         `💰 Thưởng khi giải đúng: **+${formatGold(reward)} Gold**`
       )
       .setColor(0x3498DB)
-      .setFooter({ text: 'Gõ trực tiếp đáp án vào kênh chat!' });
+      .setFooter({ text: 'Gõ trực tiếp đáp án (chỉ số) vào kênh chat!' });
 
     await message.channel.send({ embeds: [embed] });
 
-    const filter = m => m.author.id === message.author.id;
+    // Chỉ nhận tin nhắn là số hợp lệ từ người gọi lệnh (không nhận tin nhắn lệnh bot khác)
+    const filter = m => m.author.id === message.author.id && /^-?\d+$/.test(m.content.trim());
     try {
       const collected = await message.channel.awaitMessages({
         filter,
