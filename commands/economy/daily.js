@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getUser, addGold, setDaily, formatGold, getTodayString } = require('../../utils/helpers');
+const { claimDaily, formatGold, getTodayString } = require('../../utils/helpers');
 
 module.exports = {
   name: 'daily',
@@ -7,20 +7,17 @@ module.exports = {
   aliases: ['diemdanh'],
   run: async (client, message, args) => {
     const uid = String(message.author.id);
-    const user = getUser(uid);
     const today = getTodayString();
+    const reward = 500;
 
-    if (user.last_daily === today) {
+    const result = claimDaily(uid, today, reward);
+    if (result.alreadyClaimed) {
       const embed = new EmbedBuilder()
         .setTitle('⏰ Chưa Đến Giờ Nhận Thưởng')
         .setDescription('Bạn đã nhận thưởng ngày hôm nay rồi. Hãy quay lại vào ngày mai nhé!')
         .setColor(0xE74C3C);
       return message.channel.send({ embeds: [embed] });
     }
-
-    const reward = 500;
-    addGold(uid, reward);
-    setDaily(uid, today);
 
     const embed = new EmbedBuilder()
       .setTitle('🎁 Điểm Danh Hàng Ngày')

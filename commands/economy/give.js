@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getGold, transferGold, formatGold, resolveMember } = require('../../utils/helpers');
+const { getGold, transferGold, formatGold, resolveMember, MAX_BET } = require('../../utils/helpers');
 
 module.exports = {
   name: 'give',
@@ -7,19 +7,10 @@ module.exports = {
   aliases: ['pay', 'chuyentien'],
   run: async (client, message, args) => {
     const target = await resolveMember(message, args);
-    const amountArg = args.find(a => !a.startsWith('<@') && !isNaN(parseInt(a, 10)));
-    const amount = amountArg ? parseInt(amountArg, 10) : NaN;
 
     if (!target) {
       const embed = new EmbedBuilder()
-        .setDescription('❌ Vui lòng gắn thẻ (tag) người nhận tiền! (Ví dụ: `A!give @user 100`)')
-        .setColor(0xE74C3C);
-      return message.channel.send({ embeds: [embed] });
-    }
-
-    if (isNaN(amount) || amount <= 0) {
-      const embed = new EmbedBuilder()
-        .setDescription('❌ Số tiền chuyển phải lớn hơn 0!')
+        .setDescription('❌ Vui lòng gắn thẻ (tag) hoặc nhập ID người nhận! (Ví dụ: `A!give @user 100`)')
         .setColor(0xE74C3C);
       return message.channel.send({ embeds: [embed] });
     }
@@ -27,6 +18,33 @@ module.exports = {
     if (target.id === message.author.id) {
       const embed = new EmbedBuilder()
         .setDescription('❌ Bạn không thể tự chuyển tiền cho chính mình!')
+        .setColor(0xE74C3C);
+      return message.channel.send({ embeds: [embed] });
+    }
+
+    // Tìm amount trong args: phần tử là số nguyên nhưng KHÔNG trùng với ID của target
+    let amount = NaN;
+    for (const a of args) {
+      const clean = a.replace(/[<@!>]/g, '');
+      if (clean !== target.id && /^\d+$/.test(a)) {
+        const parsed = parseInt(a, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          amount = parsed;
+          break;
+        }
+      }
+    }
+
+    if (isNaN(amount) || amount <= 0 || !Number.isSafeInteger(amount)) {
+      const embed = new EmbedBuilder()
+        .setDescription('❌ Số tiền chuyển phải là số nguyên lớn hơn 0!')
+        .setColor(0xE74C3C);
+      return message.channel.send({ embeds: [embed] });
+    }
+
+    if (amount > MAX_BET) {
+      const embed = new EmbedBuilder()
+        .setDescription(`❌ Số tiền chuyển tối đa là **${formatGold(MAX_BET)} Gold**!`)
         .setColor(0xE74C3C);
       return message.channel.send({ embeds: [embed] });
     }

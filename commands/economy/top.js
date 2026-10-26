@@ -22,7 +22,10 @@ module.exports = {
     for (let idx = 0; idx < topUsers.length; idx++) {
       const row = topUsers[idx];
       const rank = idx + 1;
-      const user = client.users.cache.get(row.user_id);
+      let user = client.users.cache.get(row.user_id);
+      if (!user) {
+        user = await client.users.fetch(row.user_id).catch(() => null);
+      }
       const name = user ? user.username : `User ${row.user_id}`;
       const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `\`#${rank}\``;
       description += `${medal} **${name}** — **${formatGold(row.gold)} Gold**\n`;
