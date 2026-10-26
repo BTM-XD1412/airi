@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Events, MessageFlags } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const config = require('./utils/json/config.json');
@@ -48,7 +48,6 @@ function walkCommands(directory) {
 
 // Nạp tất cả lệnh prefix từ thư mục commands
 walkCommands(path.join(__dirname, 'commands'));
-console.log(`[ Commands ] Đã nạp thành công các lệnh Prefix vào Collection`);
 
 /**
  * Nạp toàn bộ Slash Commands từ thư mục slash
@@ -71,12 +70,11 @@ function loadSlashCommands(directory) {
 
 // Nạp tất cả Slash Commands từ thư mục slash
 loadSlashCommands(path.join(__dirname, 'slash'));
-console.log(`[ Slash Commands ] Đã nạp thành công ${client.slashCommands.size} Slash Commands vào Collection`);
 
 // ==========================================
 // EVENT: ready
 // ==========================================
-client.once('ready', () => readyEvent(client));
+client.once(Events.ClientReady, () => readyEvent(client));
 
 // ==========================================
 // EVENT: messageCreate (Prefix Commands)
@@ -84,7 +82,6 @@ client.once('ready', () => readyEvent(client));
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // Hỗ trợ prefixes từ config và tag @Bot
   const validPrefixes = [
     ...(config.prefixes || ['A!', 'a!', 'A ']),
     `<@!${client.user.id}> `,
@@ -111,7 +108,7 @@ client.on('messageCreate', async (message) => {
   try {
     await command.run(client, message, args);
   } catch (error) {
-    console.error(`[Error] Lỗi khi thực thi lệnh ${commandName}:`, error);
+    console.error(`[command/${commandName}] ` + (error?.message || error));
     message.reply('❌ Đã có lỗi xảy ra trong quá trình xử lý lệnh!').catch(() => {});
   }
 });
@@ -128,8 +125,8 @@ client.on('interactionCreate', async (interaction) => {
   try {
     await command.run(client, interaction);
   } catch (error) {
-    console.error(`[Error] Lỗi khi thực thi Slash Command /${interaction.commandName}:`, error);
-    const replyPayload = { content: '❌ Đã có lỗi xảy ra khi thực thi lệnh!', ephemeral: true };
+    console.error(`[slash/${interaction.commandName}] ` + (error?.message || error));
+    const replyPayload = { content: '❌ Đã có lỗi xảy ra khi thực thi lệnh!', flags: MessageFlags.Ephemeral };
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp(replyPayload).catch(() => {});
     } else {
@@ -139,16 +136,21 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // ==========================================
+// LẮNG NGHE LỖI HỆ THỐNG
+// ==========================================
+client.on('error', (err) => console.error('[client] ' + (err?.message || err)));
+process.on('unhandledRejection', (reason) => console.error('[process] ' + (reason?.message || reason)));
+
+// ==========================================
 // ĐĂNG NHẬP BOT
 // ==========================================
 const TOKEN = process.env.DISCORD_TOKEN || 'ĐIỀN_TOKEN_BOT_CỦA_BẠN_VÀO_ĐÂY';
 
 if (!TOKEN || TOKEN === 'DIEN_TOKEN_BOT_CUA_BAN_VAO_DAY' || TOKEN === 'ĐIỀN_TOKEN_BOT_CỦA_BẠN_VÀO_ĐÂY') {
-  console.warn('⚠️ CẢNH BÁO: Bạn chưa cấu hình Token Discord hợp lệ trong file .env!');
-  console.warn("Vui lòng mở file .env và thay thế 'DIEN_TOKEN_BOT_CUA_BAN_VAO_DAY' bằng Token bot của bạn.");
+  console.warn('[config] Chưa cấu hình Token Discord hợp lệ trong file .env');
 } else {
   client.login(TOKEN).catch((err) => {
-    console.error('❌ Không thể kết nối tới Discord. Kiểm tra lại Token hoặc kết nối mạng:', err.message);
+    console.error('[login] ' + err.message);
   });
 }
 

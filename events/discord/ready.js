@@ -1,8 +1,6 @@
 const { ActivityType } = require('discord.js');
 
 module.exports = async (client) => {
-  console.log(`[ Event | ready.js ] Bot đã đăng nhập thành công: ${client.user.tag}`);
-
   // Đồng bộ hóa Slash Commands với Discord
   try {
     if (client.slashCommands && client.slashCommands.size > 0) {
@@ -15,13 +13,11 @@ module.exports = async (client) => {
       }));
 
       await client.application.commands.set(commandsData);
-      console.log(`[ Slash Commands ] Đã đăng ký thành công ${commandsData.length} Slash Commands với Discord!`);
     }
   } catch (err) {
-    console.error('[ Slash Commands ] Lỗi khi đồng bộ Slash Commands:', err.message);
+    console.error('[ready.js] ' + err.message);
   }
 
-  // Cấu hình trạng thái hoạt động xoay tua cho Bot
   const activities = [
     'Prefix: A!help',
     'Slash: /addgold, /removegold',
